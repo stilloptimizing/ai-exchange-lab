@@ -56,7 +56,7 @@ return e;}
 
 function looksFormatted(s){return /&#x20;|&#32;|&nbsp;|\\[ \t]*\r?\n/i.test(s)}
 function cleanCopy(s){
-  return s.trim().replace(/&#x20;|&#32;|&nbsp;/gi,' ').replace(/\\[ \t]*\r?\n/g,'\n').replace(/^\x60{3}(?:json)?\s*/i,'').replace(/\s*\x60{3}$/,'').trim();
+  return s.trim().replace(/&#x20;|&#32;|&nbsp;/gi,' ').replace(/\\[ \t]*(?:\r?\n|$)/g,'\n').replace(/^\x60{3}(?:json)?\s*/i,'').replace(/\s*\x60{3}$/,'').trim();
 }
 $('paste').onclick=async()=>{try{$('response').value=await navigator.clipboard.readText();save();$('status').textContent='Pasted; tap Validate.'}catch(e){$('status').textContent='Clipboard access unavailable. Long-press the response box and select Paste.'}};
 $('repair').onclick=()=>{$('cleaned').value=cleanCopy($('response').value);$('review').hidden=false};
