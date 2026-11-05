@@ -7,13 +7,13 @@ textarea,select{padding:10px;border:1px solid #bdc8d6}textarea{height:160px;font
 button{padding:12px;margin:5px 0;border:0;background:#183953;color:white}button.secondary{background:#e9edf3;color:#183953}
 button:disabled{opacity:.45}.info{font-size:13px;color:#556574}.status{padding:10px;background:#eef2f6;border-radius:8px;white-space:pre-wrap;overflow-wrap:anywhere}
 .ok{background:#e2f4e6}.bad{background:#ffe8e6}
-</style></head><body><h1>Universal AI Exchange · Handoff Lab v0.5</h1>
+</style></head><body><h1>Universal AI Exchange · Handoff Lab v0.6</h1>
 <p class="info">Synthetic tree specimen only. No network calls, credentials, subscriptions or real app data. All validation runs on this page. Synthetic drafts are stored on this device only; Clear local test removes them.</p>
 <main><h2>1 · App → AI</h2><label for="agent">AI client</label><select id="agent"><option>ChatGPT</option><option>Claude</option><option>Gemini</option></select>
 <p class="info">The prepared request below should already be filled in.</p><textarea id="request" readonly></textarea>
 <button id="copyrequest">Copy prepared request</button><button class="secondary" id="share">Try device Share</button><p class="info" id="outstatus">Ready.</p></main>
 <main><h2>2 · AI → App</h2><p class="info">Paste the AI's complete JSON response here.</p><textarea id="response" placeholder="Paste AI response"></textarea>
-<button class="secondary" id="paste">Paste from clipboard</button>
+<button class="secondary" id="paste">Paste and check clipboard</button>
 <button id="validate">Validate proposed update (no writes)</button>
 <button class="secondary" id="repair" hidden>Review formatting cleanup</button>
 <div id="review" hidden><p class="info">Review the cleaned text before using it. No proposal is approved automatically.</p><textarea id="cleaned" readonly></textarea><button id="usecleaned">Use cleaned text</button></div><p id="status" class="status" role="status">Not tested yet.</p></main>
@@ -54,11 +54,38 @@ if(!obj(x.payload)||!Array.isArray(x.payload.operations)||x.payload.operations.l
 else {var o=x.payload.operations[0];if(!obj(o)||o.action!=='suggest-field'||o.field!=='tentativeSpecies'||typeof o.value!=='string'||!o.value.trim()||o.value.length>300)e.push('Invalid tentativeSpecies operation')}
 return e;}
 
-function looksFormatted(s){return /&#x20;|&#32;|&nbsp;|\\[ \t]*\r?\n/i.test(s)}
+function looksFormatted(s){return /&#x20;|&#32;|&nbsp;|\\[ \t]*\r?\n|\\[\[\]{}]/i.test(s)}
 function cleanCopy(s){
-  return s.trim().replace(/&#x20;|&#32;|&nbsp;/gi,' ').replace(/\\[ \t]*(?:\r?\n|$)/g,'\n').replace(/^\x60{3}(?:json)?\s*/i,'').replace(/\s*\x60{3}$/,'').trim();
+  // Only remove known text-transport artifacts; never alter inside JSON strings.
+  var raw=s.trim().replace(/&#x20;|&#32;|&nbsp;/gi,' ').replace(/\\[ \t]*(?:\r?\n|$)/g,'\n')
+    .replace(/^\x60{3}(?:json)?\s*/i,'').replace(/\s*\x60{3}$/,'').trim();
+  var result='', inside=false, escaped=false;
+  for(var i=0;i<raw.length;i++){
+    var ch=raw[i], next=raw[i+1];
+    if(inside){
+      result+=ch;
+      if(escaped)escaped=false;
+      else if(ch==='\\')escaped=true;
+      else if(ch==='"')inside=false;
+    } else {
+      if(ch==='"'){inside=true;result+=ch}
+      else if(ch==='\\' && /[\[\]{}]/.test(next||'')){i++;result+=next}
+      else result+=ch;
+    }
+  }
+  return result.trim();
 }
-$('paste').onclick=async()=>{try{$('response').value=await navigator.clipboard.readText();save();$('status').textContent='Pasted; tap Validate.'}catch(e){$('status').textContent='Clipboard access unavailable. Long-press the response box and select Paste.'}};
+$('paste').onclick=async()=>{
+  try{
+    var copied=await navigator.clipboard.readText();
+    $('response').value=copied;
+    accepted=null;$('approve').disabled=true;$('repair').hidden=true;$('review').hidden=true;save();
+    $('validate').onclick();
+  }catch(e){
+    $('status').className='status bad';
+    $('status').textContent='Clipboard access blocked. Long-press the input box and select Paste; then tap Validate.';
+  }
+};
 $('repair').onclick=()=>{$('cleaned').value=cleanCopy($('response').value);$('review').hidden=false};
 $('usecleaned').onclick=()=>{$('response').value=$('cleaned').value;$('review').hidden=true;$('repair').hidden=true;save();$('status').textContent='Formatting cleaned locally. Tap Validate to check the content.'};
 $('validate').onclick=()=>{
@@ -77,7 +104,7 @@ $('validate').onclick=()=>{
     $('status').textContent='FAIL — '+e.message;
     if(looksFormatted($('response').value)){
       $('repair').hidden=false;
-      $('status').textContent+='\nCopied-text formatting detected. Tap Review formatting cleanup.';
+      $('status').textContent+='\nCopied-response formatting detected (possibly escaped brackets). Tap Review formatting cleanup; inspect before using.';
     }
   }
 };
