@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AI Exchange Handoff Lab</title><style>
+body{font:16px system-ui,sans-serif;background:#f6f7fb;color:#17253b;max-width:680px;margin:auto;padding:18px}
+main{background:white;border:1px solid #dce3ec;border-radius:14px;padding:16px;margin:14px 0}
+h1{font-size:1.5rem}h2{font-size:1.12rem}p{line-height:1.5}textarea,select,button{box-sizing:border-box;width:100%;font:inherit;border-radius:8px}
+textarea,select{padding:10px;border:1px solid #bdc8d6}textarea{height:160px;font:12px ui-monospace,monospace}
+button{padding:12px;margin:5px 0;border:0;background:#183953;color:white}button.secondary{background:#e9edf3;color:#183953}
+button:disabled{opacity:.45}.info{font-size:13px;color:#556574}.status{padding:10px;background:#eef2f6;border-radius:8px;white-space:pre-wrap;overflow-wrap:anywhere}
+.ok{background:#e2f4e6}.bad{background:#ffe8e6}
+</style></head><body><h1>Universal AI Exchange · Handoff Lab v0.4</h1>
+<p class="info">Synthetic tree specimen only. No network calls, credentials, subscriptions or real app data. All validation runs on this page.</p>
+<main><h2>1 · App → AI</h2><label for="agent">AI client</label><select id="agent"><option>ChatGPT</option><option>Claude</option><option>Gemini</option></select>
+<p class="info">The prepared request below should already be filled in.</p><textarea id="request" readonly></textarea>
+<button id="copyrequest">Copy prepared request</button><button class="secondary" id="share">Try device Share</button><p class="info" id="outstatus">Ready.</p></main>
+<main><h2>2 · AI → App</h2><p class="info">Paste the AI's complete JSON response here.</p><textarea id="response" placeholder="Paste AI response"></textarea>
+<button id="validate">Validate proposed update (no writes)</button><p id="status" class="status" role="status">Not tested yet.</p></main>
+<main><h2>3 · App → AI receipt</h2><button id="approve" disabled>Approve simulated proposal</button><textarea readonly id="receipt" placeholder="Simulated receipt appears here"></textarea>
+<button class="secondary" id="copyreceipt">Copy receipt</button><p class="info">Approval is simulated. No TREANT records are changed.</p></main>
+<script>
+(function(){
+'use strict';
+var $=id=>document.getElementById(id);
+var session='synthetic-session-001', msg='synthetic-context-001';
+var subject={appId:'TREANT',recordType:'specimen',recordId:'synthetic-147',expectedRevision:3};
+var context={protocol:'universal-ai-exchange',version:'0.1',kind:'CONTEXT',messageId:msg,sessionId:session,source:{type:'app',id:'TREANT'},destination:{type:'ai-client',id:'any'},subject:subject,payload:{task:'Make a tentative text-only plant identification; do not assert a photo was examined.',facts:{existingIdentification:'unknown',leaves:'narrow, glossy, evergreen',site:'fictional nursery'}}};
+var accepted=null;
+function prepare(){
+var agent=$('agent').value.toLowerCase();
+$('request').value='This is a SYNTHETIC Universal AI Exchange test, not a project handoff. Return ONLY raw JSON, without markdown or explanation. Analyze the following fictional TREANT record. Use protocol universal-ai-exchange, version 0.1, kind PROPOSAL, sessionId '+session+', basedOnMessageId '+msg+', subject exactly as shown, destination {type:app,id:TREANT}, source {type:ai-client,id:'+agent+'}. Include a unique messageId and createdAt UTC timestamp. payload must be {"operations":[{"action":"suggest-field","field":"tentativeSpecies","value":"your tentative text-only suggestion"}]}. Do not claim a real identification or database write.\n\nCONTEXT:\n'+JSON.stringify(context,null,2);
+}
+$('agent').addEventListener('change',prepare);prepare();
+async function copyText(id){var el=$(id);try{await navigator.clipboard.writeText(el.value);$('outstatus').textContent='Copied. Paste into your chosen AI.'}catch(e){el.focus();el.select();$('outstatus').textContent='Copy restricted here. Text selected — choose Copy from your device menu.'}}
+$('copyrequest').onclick=()=>copyText('request');
+$('copyreceipt').onclick=()=>copyText('receipt');
+$('share').onclick=async()=>{if(!navigator.share){$('outstatus').textContent='Native Share unavailable; use Copy.';return}try{await navigator.share({title:'Synthetic AI Exchange test',text:$('request').value});$('outstatus').textContent='Share completed. Check what the AI received.'}catch(e){$('outstatus').textContent='Share unavailable or cancelled; use Copy.'}};
+function obj(x){return !!x&&typeof x==='object'&&!Array.isArray(x)}
+function errors(x){var e=[];if(!obj(x))return ['Expected JSON object'];
+if(x.protocol!=='universal-ai-exchange'||x.version!=='0.1'||x.kind!=='PROPOSAL')e.push('Wrong protocol, version, or kind');
+if(x.sessionId!==session||x.basedOnMessageId!==msg)e.push('Wrong session/context');
+if(!obj(x.subject)||JSON.stringify(x.subject)!==JSON.stringify(subject))e.push('Wrong subject or revision');
+if(!obj(x.source)||x.source.type!=='ai-client'||x.source.id!==$('agent').value.toLowerCase())e.push('Wrong AI source');
+if(!obj(x.destination)||x.destination.type!=='app'||x.destination.id!=='TREANT')e.push('Wrong destination');
+if(typeof x.messageId!=='string'||!x.messageId.trim()||x.messageId===msg)e.push('Invalid messageId');
+if(typeof x.createdAt!=='string'||!Number.isFinite(Date.parse(x.createdAt))||!x.createdAt.endsWith('Z'))e.push('Invalid timestamp');
+if(!obj(x.payload)||!Array.isArray(x.payload.operations)||x.payload.operations.length!==1)e.push('Expected one operation');
+else {var o=x.payload.operations[0];if(!obj(o)||o.action!=='suggest-field'||o.field!=='tentativeSpecies'||typeof o.value!=='string'||!o.value.trim()||o.value.length>300)e.push('Invalid tentativeSpecies operation')}
+return e;}
+$('validate').onclick=()=>{accepted=null;$('approve').disabled=true;try{
+var raw=$('response').value.trim();if(raw.startsWith('\x60\x60\x60'))raw=raw.replace(/^\x60{3}(?:json)?\s*/i,'').replace(/\s*\x60{3}$/,'');
+var p=JSON.parse(raw),err=errors(p);if(err.length)throw Error(err.join('\n'));accepted=p;
+$('status').className='status ok';$('status').textContent='PASS — valid synthetic proposal for TREANT specimen synthetic-147.\nNo real data changed.';$('approve').disabled=false;
+}catch(e){$('status').className='status bad';$('status').textContent='FAIL — '+e.message;}};
+$('approve').onclick=()=>{if(!accepted)return;$('receipt').value=JSON.stringify({protocol:'universal-ai-exchange',version:'0.1',kind:'RECEIPT',messageId:'synthetic-receipt-'+Date.now(),sessionId:session,basedOnMessageId:accepted.messageId,source:{type:'app',id:'TREANT'},destination:{type:'ai-client',id:$('agent').value.toLowerCase()},subject:subject,createdAt:new Date().toISOString(),payload:{status:'simulated-approved-only',changesApplied:0}},null,2);$('approve').disabled=true;};
+})();
+</script></body></html>
